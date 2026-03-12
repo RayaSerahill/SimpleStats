@@ -1,21 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Project Sdk="Dalamud.NET.Sdk/13.0.0">
+<Project Sdk="Dalamud.NET.Sdk/14.0.2">
   <PropertyGroup>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
     <Description>sbjStats.</Description>
-    <PackageProjectUrl>https://github.com/RayaEspi/sbjStats</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/RayaSerahill/sbjStats</PackageProjectUrl>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
     <IsPackable>false</IsPackable>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <LangVersion>14</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="..\Data\goat.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Visible>false</Visible>
-    </Content>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="ECommons" Version="3.0.0.6" />
+    <PackageReference Include="ECommons" Version="3.1.0.27" />
+    <PackageReference Update="DalamudPackager" Version="14.0.2" />
   </ItemGroup>
 </Project>

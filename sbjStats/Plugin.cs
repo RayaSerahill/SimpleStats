@@ -1,61 +1,53 @@
 ﻿using System;
-using System.Linq;
 using System.Collections.Generic;
+using System.Linq;
 using Dalamud.Game.Command;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
-using sbjStats.Windows;
 using ECommons;
+using ECommons.EzIpcManager;
 using ECommons.Logging;
+using sbjStats.Windows;
 
 namespace sbjStats;
 
-public sealed class Plugin : IDalamudPlugin {
+public sealed class Plugin : IDalamudPlugin
+{
     [PluginService] internal static IDalamudPluginInterface PluginInterface { get; set; } = null!;
     [PluginService] internal static ICommandManager CommandManager { get; set; } = null!;
     [PluginService] internal static IPluginLog Log { get; set; } = null!;
-    [PluginService] public static IChatGui ChatGui { get; set; } = null!;
 
     private const string CommandName = "/sbjstats";
 
-    public Configuration Configuration { get; init; }
-    public readonly WindowSystem WindowSystem = new("sbjStats");
-    private ConfigWindow ConfigWindow { get; init; }
-    private MainWindow MainWindow { get; init; }
+    public Configuration Configuration { get; }
+    public WindowSystem WindowSystem { get; } = new("sbjStats");
+    private ConfigWindow ConfigWindow { get; }
     private SimpleBlackjackIpc SimpleBlackjackIpc { get; set; }
     private bool ipcInitialized = false;
+    
+    
 
-    public Plugin() {
-        try
-        {
-            // Initialize ECommons fully so logging is available during init
-            ECommonsMain.Init(PluginInterface, this, Module.All);
-        }
-        catch (Exception ex)
-        {
-            // Use Dalamud's IPluginLog (already injected) to report init issues
-            Log.Error($"ECommons init failed: {ex}");
-            // Optional: rethrow to prevent loading without ECommons
-            // throw;
-        }
+    public Plugin()
+    {
+        ECommonsMain.Init(PluginInterface, this, Module.All);
+
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
         ConfigWindow = new ConfigWindow(this);
-        MainWindow = new MainWindow(this);
         WindowSystem.AddWindow(ConfigWindow);
-        WindowSystem.AddWindow(MainWindow);
 
-        PluginInterface.UiBuilder.Draw += DrawUI;
-        PluginInterface.UiBuilder.OpenConfigUi += ToggleConfigUI;
-        PluginInterface.UiBuilder.OpenMainUi += ToggleMainUI;
+        PluginInterface.UiBuilder.Draw += DrawUi;
+        PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
+
         
-        InitializeIpc();
-
-        CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand) {
-            HelpMessage = "The stats are being uploaded in background ^^"
+        CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
+        {
+            HelpMessage = "Open SBJ stats uploader settings"
         });
+
+        InitializeIpc();
     }
     
     private void InitializeIpc() {
@@ -64,7 +56,8 @@ public sealed class Plugin : IDalamudPlugin {
             Log.Information("Initializing IPC for SimpleBlackjack...");
             SimpleBlackjackIpc = new SimpleBlackjackIpc(
                 getStats: HandleGetStats,
-                getArchives: HandleGetArchives
+                getArchives: HandleGetArchives,
+                processRound: processRound
             );
             ipcInitialized = true;
             Log.Information("IPC initialized.");
@@ -75,56 +68,78 @@ public sealed class Plugin : IDalamudPlugin {
         }
     }
 
-    public void Dispose() {
-        WindowSystem.RemoveAllWindows();
-        ConfigWindow.Dispose();
-        MainWindow.Dispose();
-        CommandManager.RemoveHandler(CommandName);
-        CommandManager.RemoveHandler(CommandName);
-    }
-    
-    public void SendMassStatsToServer()
+    private void processRound(StatsRecording obj)
     {
-        SimpleBlackjackIpc.SendMassStatsToServer();
+        Log.Information("Processing completed SBJ round, uploading stats...");
+        CsvUploader.SendStatAsCsv(obj, Configuration.Endpoint, Configuration.ApiKey);
     }
 
-    private void OnCommand(string command, string args) {
-        if (!ipcInitialized) {
-            Log.Error("IPC is not initialized yet. Please try again in a moment.");
-            return;
-        }
+    public void Dispose()
+    {
+        CommandManager.RemoveHandler(CommandName);
+
+        PluginInterface.UiBuilder.Draw -= DrawUi;
+        PluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
+
+        WindowSystem.RemoveAllWindows();
+        ConfigWindow.Dispose();
+
+        ECommonsMain.Dispose();
+    }
+
+    private void OnCommand(string command, string args)
+    {
         var trimmedArgs = args?.Trim().ToLowerInvariant();
-        if (trimmedArgs == "archive") {
+        if (trimmedArgs == "archive")
+        {
             var archives = SimpleBlackjackIpc.GetArchives();
             Log.Information(Newtonsoft.Json.JsonConvert.SerializeObject(archives));
             var output = string.Join(", ", archives.Select(kvp => $"{kvp.Key}: {kvp.Value}"));
             Log.Information(output);
             Log.Information("========== Available Archives ==========");
-        } else if(trimmedArgs == "stats") {
-            var stats = SimpleBlackjackIpc.GetStats(Guid.Empty.ToString());
-            Log.Information(Newtonsoft.Json.JsonConvert.SerializeObject(stats));
-            
-            Log.Information("========== Current Stats ==========");
-            if (stats.Count == 0) {
-                Log.Information("No stats available.");
-                return;
-            }
-            Log.Information($"Total Stats Count: {stats.Count}");
-            
-            
-            var output = string.Join(", ", stats.Select(s => $"Time: {s.Time}, Bets: {s.BetsCollected}, Payouts: {s.Payouts}"));
-            Log.Information(output);
-            Log.Information("========== Current Stats ==========");
-        } else if (trimmedArgs == "config") {
-            ToggleConfigUI();
-        } else {
-            ToggleMainUI();
         }
+        else
+        {
+            OpenConfigUi();
+        }
+
     }
 
-    private void DrawUI() => WindowSystem.Draw();
-    public void ToggleConfigUI() => ConfigWindow.Toggle();
-    public void ToggleMainUI() => MainWindow.Toggle();
+    private void DrawUi()
+    {
+        WindowSystem.Draw();
+    }
+
+    private void OpenConfigUi()
+    {
+        ConfigWindow.IsOpen = true;
+    }
+
+    private void HandleGameFinishedEx(StatsRecording stat)
+    {
+        Log.Information("Received SBJ game finished event, uploading stats...");
+        try
+        {
+            if (!Configuration.EnableUpload)
+            {
+                PluginLog.Information("SBJ upload skipped: upload disabled.");
+                return;
+            }
+
+            CsvUploader.SendStatAsCsv(
+                stat,
+                Configuration.Endpoint,
+                Configuration.ApiKey);
+
+            PluginLog.Information("SBJ stat uploaded.");
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error($"SBJ upload failed: {ex}");
+        }
+    }
+    
+    
     private List<StatsRecording> HandleGetStats(string archiveId) {
         return new List<StatsRecording>();
     }
