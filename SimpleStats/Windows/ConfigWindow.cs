@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.ImGuiNotification;
@@ -38,31 +38,48 @@ public sealed class ConfigWindow : Window, IDisposable
         if (ImGui.Checkbox("Enable Live Upload", ref enableUpload))
             UpdateConfig(() => plugin.Configuration.EnableUpload = enableUpload);
 
-        if (ImGui.BeginTabBar("SimpleGambaTabs"))
+        if (!ImGui.BeginTabBar("SimpleGambaTabs"))
+            return;
+
+        if (ImGui.BeginTabItem("SimpleBlackjack"))
         {
-            if (ImGui.BeginTabItem("SimpleBlackjack"))
+            ImGui.TextWrapped("If you have existing stats that you want to upload, you can do so by clicking the button below. This will upload all stats that have been recorded so far while avoiding duplicates that are already uploaded.");
+            if (ImGui.Button("Upload existing stats###UploadExistingSbj"))
             {
-                ImGui.TextWrapped("If you have existing stats that you want to upload, you can do so by clicking the button below. This will upload all stats that have been recorded so far while avoiding duplicates that are already uploaded.");
-                if (ImGui.Button("Upload existing stats"))
+                if (string.IsNullOrEmpty(plugin.Configuration.ApiKey))
                 {
-                    if (String.IsNullOrEmpty(plugin.Configuration.ApiKey))
-                    {
-                        plugin.ShowToast("Please enter a valid API key.", NotificationType.Error);
-                        return;
-                    }
-                    plugin.UploadExistingStatsSbjAsync();
+                    plugin.ShowToast("Please enter a valid API key.", NotificationType.Error);
+                }
+                else
+                {
+                    _ = plugin.UploadExistingStatsSbjAsync();
                 }
             }
 
-            if (ImGui.BeginTabItem("SimpleScratch"))
-            {
-                
-            }
+            ImGui.EndTabItem();
         }
-        
 
+        if (ImGui.BeginTabItem("SimpleScratch"))
+        {
+            ImGui.TextWrapped("SimpleScratch now has its own upload pipeline shell. Live events and archive retrieval are wired up, but the actual transport format still needs to be written in ScratchUploadHandler.");
+            if (ImGui.Button("Upload current archive snapshot###UploadExistingScratch"))
+            {
+                if (string.IsNullOrEmpty(plugin.Configuration.ApiKey))
+                {
+                    plugin.ShowToast("Please enter a valid API key.", NotificationType.Error);
+                }
+                else
+                {
+                    _ = plugin.UploadExistingStatsScratchAsync();
+                }
+            }
+
+            ImGui.EndTabItem();
+        }
+
+        ImGui.EndTabBar();
     }
-    
+
     private void UpdateConfig(Action applyChanges)
     {
         applyChanges();

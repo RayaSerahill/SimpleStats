@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using ECommons.EzIpcManager;
@@ -6,32 +6,42 @@ using ECommons.Logging;
 
 namespace sbjStats;
 
-public class SimpleScratchIpc
+public sealed class SimpleScratchIpc
 {
-    private readonly Action<StatsRecording> _processRound;
-    public SimpleScratchIpc(
-        Action<StatsRecording> processRound
-        )
+    private readonly Action<string> onGameEnded;
+
+    public SimpleScratchIpc(Action<string> onGameEnded)
     {
         PluginLog.Information("SimpleScratchIpc constructor called.");
-        _processRound = processRound;
+        this.onGameEnded = onGameEnded;
         EzIPC.Init(this, "SimpleScratch");
         PluginLog.Information("EzIPC.Init called for SimpleScratchIpc.");
     }
-    
 
-    [EzIPC] public Func<CreatePlayerMessage, Task<string>> CreatePlayerIPC;
-    [EzIPC] public Func<Task<string>> GetPlayersIPC;
-    [EzIPC] public Func<int, Task<bool>> EndPlayerIPC;
-    [EzIPC] public Func<List<CardPreset>> GetPresetsIPC;
-    [EzIPC] public Func<Task<string>> GetArchiveIPC;
-    [EzIPC] public Func<string> GetPresetNamesIPC;
-    [EzIPC] public Func<string> GetThemesIPC;
+    [EzIPC] private Func<CreatePlayerMessage, Task<string>>? CreatePlayerIPC;
+    [EzIPC] private Func<Task<string>>? GetPlayersIPC;
+    [EzIPC] private Func<int, Task<bool>>? EndPlayerIPC;
+    [EzIPC] private Func<List<CardPreset>>? GetPresetsIPC;
+    [EzIPC] private Func<Task<string>>? GetArchiveIPC;
+    [EzIPC] private Func<string>? GetPresetNamesIPC;
+    [EzIPC] private Func<string>? GetThemesIPC;
+
+    public async Task<string> GetArchiveAsync()
+    {
+        if (GetArchiveIPC is null)
+        {
+            PluginLog.Warning("SimpleScratch GetArchive IPC is not available.");
+            return string.Empty;
+        }
+
+        return await GetArchiveIPC();
+    }
 
     [EzIPCEvent("GameEndedIPC")]
     private void OnGameEnded(string json)
     {
         DuoLog.Information($"[GameEnded] {json}");
+        onGameEnded(json);
     }
 
     public class CreatePlayerMessage

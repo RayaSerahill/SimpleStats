@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+using System;
 using System.Threading.Tasks;
 using Dalamud.Game.Command;
 using Dalamud.Interface.ImGuiNotification;
@@ -9,45 +7,49 @@ using Dalamud.Plugin;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using ECommons;
-using ECommons.EzIpcManager;
-using ECommons.Logging;
 using sbjStats.Windows;
 
 namespace sbjStats;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    public static Plugin Instance { get; private set; }
+    public static Plugin Instance { get; private set; } = null!;
+
     [PluginService] internal static IDalamudPluginInterface PluginInterface { get; set; } = null!;
     [PluginService] internal static ICommandManager CommandManager { get; set; } = null!;
     [PluginService] internal static IPluginLog Log { get; set; } = null!;
     [PluginService] internal static INotificationManager NotificationManager { get; set; } = null!;
 
     private const string CommandName = "/simplestats";
+    private const string Endpoint = "https://stats.serahill.net/api/admin/games/import";
+    public const string EndpointScratch = "https://stats.serahill.net/api/admin/scratch/import";
 
     public Configuration Configuration { get; }
     public WindowSystem WindowSystem { get; } = new("sbjStats");
-    private ConfigWindow ConfigWindow { get; }
-    private SimpleBlackjackIpc SimpleBlackjackIpc { get; set; }
-    private SimpleScratchIpc SimpleScratchIpc { get; set; }
-    private bool ipcInitialized = false;
-    
-    const string Endpoint = "https://stats.serahill.net/api/admin/games/import";
-    
+    public string StatsEndpoint => Endpoint;
+
+    private readonly ConfigWindow configWindow;
+    private readonly BlackjackUploadHandler blackjackUploadHandler;
+    private readonly ScratchUploadHandler scratchUploadHandler;
+
+    private SimpleBlackjackIpc? simpleBlackjackIpc;
+    private SimpleScratchIpc? simpleScratchIpc;
+
     public Plugin()
     {
         Instance = this;
         ECommonsMain.Init(PluginInterface, this, Module.All);
 
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        blackjackUploadHandler = new BlackjackUploadHandler(this);
+        scratchUploadHandler = new ScratchUploadHandler(this);
 
-        ConfigWindow = new ConfigWindow(this);
-        WindowSystem.AddWindow(ConfigWindow);
+        configWindow = new ConfigWindow(this);
+        WindowSystem.AddWindow(configWindow);
 
         PluginInterface.UiBuilder.Draw += DrawUi;
         PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
 
-        
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
             HelpMessage = "Open SBJ stats uploader settings"
@@ -55,84 +57,52 @@ public sealed class Plugin : IDalamudPlugin
 
         InitializeIpc();
     }
-    
-    private void InitializeIpc() {
+
+    private void InitializeIpc()
+    {
         try
         {
             Log.Information("Initializing IPC for SimpleBlackjack...");
-            SimpleBlackjackIpc = new SimpleBlackjackIpc(
-                getStats: HandleGetStats,
-                getArchives: HandleGetArchives,
-                processRound: processRoundSbj
-            );
-            ipcInitialized = true;
-            Log.Information("IPC initialized.");
-        } catch (Exception ex)
+            simpleBlackjackIpc = new SimpleBlackjackIpc(blackjackUploadHandler.HandleCompletedRound);
+            Log.Information("SimpleBlackjack IPC initialized.");
+        }
+        catch (Exception ex)
         {
             Log.Information($"Failed to initialize SimpleBlackjack IPC: {ex.Message}");
-            ipcInitialized = false;
         }
+
         try
         {
             Log.Information("Initializing IPC for SimpleScratch...");
-            SimpleScratchIpc = new SimpleScratchIpc(
-                processRound: processRoundScratch
-            );
-            ipcInitialized = true;
-            Log.Information("IPC initialized.");
-        } catch (Exception ex)
+            simpleScratchIpc = new SimpleScratchIpc(scratchUploadHandler.HandleGameEnded);
+            Log.Information("SimpleScratch IPC initialized.");
+        }
+        catch (Exception ex)
         {
             Log.Information($"Failed to initialize SimpleScratch IPC: {ex.Message}");
-            ipcInitialized = false;
         }
     }
 
-    private void processRoundSbj(StatsRecording obj)
-    {
-        Log.Information("Processing completed SBJ round, uploading stats...");
-        CsvUploader.SendStatAsCsv(obj, Endpoint, Configuration.ApiKey);
-    }
-
-    private void processRoundScratch(StatsRecording obj)
-    {
-        Log.Information("Processing completed SBJ round, uploading stats...");
-        CsvUploader.SendStatAsCsv(obj, Endpoint, Configuration.ApiKey);
-    }
-
-    public void Dispose()
-    {
-        CommandManager.RemoveHandler(CommandName);
-
-        PluginInterface.UiBuilder.Draw -= DrawUi;
-        PluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
-
-        WindowSystem.RemoveAllWindows();
-        ConfigWindow.Dispose();
-
-        ECommonsMain.Dispose();
-    }
-
-    private void OnCommand(string command, string args)
-    {
-        OpenConfigUi();
-    }
-    
     public async Task UploadExistingStatsSbjAsync()
     {
-        var archives = SimpleBlackjackIpc.GetArchives();
-        var allStats = new List<StatsRecording>();
-        ShowToast($"Starting upload of existing stats for {archives.Count} archives...", NotificationType.Info);
-
-        Log.Information("========== Available Archives ==========");
-        foreach (var kvp in archives)
+        if (simpleBlackjackIpc is null)
         {
-            var stats = SimpleBlackjackIpc.GetStats(kvp.Key);
-            allStats.AddRange(stats);
+            ShowToast("SimpleBlackjack IPC is not available.", NotificationType.Error);
+            return;
         }
 
-        await CsvUploader.SendMassStatsAsCsvAsync(allStats, Endpoint, Configuration.ApiKey);
-        
-        Log.Information("========== End of Available Archives ==========");
+        await blackjackUploadHandler.UploadExistingAsync(simpleBlackjackIpc);
+    }
+
+    public async Task UploadExistingStatsScratchAsync()
+    {
+        if (simpleScratchIpc is null)
+        {
+            ShowToast("SimpleScratch IPC is not available.", NotificationType.Error);
+            return;
+        }
+
+        await scratchUploadHandler.UploadExistingAsync(simpleScratchIpc);
     }
 
     public void ShowToast(string message, NotificationType type = NotificationType.Info)
@@ -152,6 +122,24 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
+    public void Dispose()
+    {
+        CommandManager.RemoveHandler(CommandName);
+
+        PluginInterface.UiBuilder.Draw -= DrawUi;
+        PluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
+
+        WindowSystem.RemoveAllWindows();
+        configWindow.Dispose();
+
+        ECommonsMain.Dispose();
+    }
+
+    private void OnCommand(string command, string args)
+    {
+        OpenConfigUi();
+    }
+
     private void DrawUi()
     {
         WindowSystem.Draw();
@@ -159,39 +147,6 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OpenConfigUi()
     {
-        ConfigWindow.IsOpen = true;
-    }
-
-    private void HandleGameFinishedEx(StatsRecording stat)
-    {
-        Log.Information("Received SBJ game finished event, uploading stats...");
-        try
-        {
-            if (!Configuration.EnableUpload)
-            {
-                PluginLog.Information("SBJ upload skipped: upload disabled.");
-                return;
-            }
-
-            CsvUploader.SendStatAsCsv(
-                stat,
-                Endpoint,
-                Configuration.ApiKey);
-
-            PluginLog.Information("SBJ stat uploaded.");
-        }
-        catch (Exception ex)
-        {
-            PluginLog.Error($"SBJ upload failed: {ex}");
-        }
-    }
-    
-    
-    private List<StatsRecording> HandleGetStats(string archiveId) {
-        return new List<StatsRecording>();
-    }
-
-    private Dictionary<string, string> HandleGetArchives() {
-        return new Dictionary<string, string>();
+        configWindow.IsOpen = true;
     }
 }

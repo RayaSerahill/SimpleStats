@@ -1,38 +1,38 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
 using ECommons.EzIpcManager;
 using ECommons.Logging;
-using Newtonsoft.Json;
 using Serilog;
 
 namespace sbjStats;
 
-public class SimpleBlackjackIpc
+public sealed class SimpleBlackjackIpc
 {
-    private readonly Action<StatsRecording> _processRound;
-    public SimpleBlackjackIpc(
-        Func<string, List<StatsRecording>> getStats,
-        Func<Dictionary<string, string>> getArchives,
-        Action<StatsRecording> processRound
-        )
+    private readonly Action<StatsRecording> onRoundCompleted;
+
+    public SimpleBlackjackIpc(Action<StatsRecording> onRoundCompleted)
     {
         PluginLog.Information("SimpleBlackjackIpc constructor called.");
-        GetStats = getStats;
-        GetArchives = getArchives;
-        _processRound = processRound;
+        this.onRoundCompleted = onRoundCompleted;
         EzIPC.Init(this, "SimpleBlackjack");
         PluginLog.Information("EzIPC.Init called for SimpleBlackjack.");
     }
 
     [EzIPC]
-    public Func<string, List<StatsRecording>> GetStats;
+    private Func<string, List<StatsRecording>>? GetStatsIpc;
 
     [EzIPC]
-    public Func<Dictionary<string, string>> GetArchives;
+    private Func<Dictionary<string, string>>? GetArchivesIpc;
+
+    public IReadOnlyDictionary<string, string> GetArchives()
+    {
+        return GetArchivesIpc?.Invoke() ?? new Dictionary<string, string>();
+    }
+
+    public IReadOnlyList<StatsRecording> GetStats(string archiveId)
+    {
+        return GetStatsIpc?.Invoke(archiveId) ?? [];
+    }
 
     [EzIPCEvent]
     public void OnGameFinished()
@@ -45,14 +45,6 @@ public class SimpleBlackjackIpc
     {
         Log.Information("OnGameFinished called in SimpleBlackjackIpc EX.");
         Log.Information(stats.Time.ToString());
-        
-        _processRound(stats);
-        
-    }
-    
-    private string GetApiKey()
-    {
-        var config = Plugin.PluginInterface.GetPluginConfig() as Configuration;
-        return config?.ApiKey?.Trim() ?? string.Empty;
+        onRoundCompleted(stats);
     }
 }
