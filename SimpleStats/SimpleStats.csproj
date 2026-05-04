@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Project Sdk="Dalamud.NET.Sdk/14.0.2">
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>1.0.7.2</Version>
+    <Version>1.0.7.5</Version>
     <Description>sbjStats.</Description>
     <PackageProjectUrl>https://github.com/RayaSerahill/SimpleStats</PackageProjectUrl>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ECommons" Version="3.1.0.27" />
-    <PackageReference Update="DalamudPackager" Version="14.0.2" />
+    <PackageReference Include="ECommons" Version="3.2.0.16" />
+    <PackageReference Update="DalamudPackager" Version="15.0.0" />
   </ItemGroup>
 </Project>
