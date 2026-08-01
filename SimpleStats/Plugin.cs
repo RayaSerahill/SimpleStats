@@ -26,6 +26,7 @@ public sealed class Plugin : IDalamudPlugin
     private const string CommandName = "/simplestats";
     private const string Endpoint = "https://stats.serahill.net/api/admin/games/import";
     public const string EndpointScratch = "https://stats.serahill.net/api/admin/scratch/import";
+    public const string EndpointAviator = "https://stats.serahill.net/api/admin/aviator/import";
 
     public Configuration Configuration { get; }
     public WindowSystem WindowSystem { get; } = new("sbjStats");
@@ -34,9 +35,11 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ConfigWindow configWindow;
     private readonly BlackjackUploadHandler blackjackUploadHandler;
     private readonly ScratchUploadHandler scratchUploadHandler;
+    private readonly AviatorUploadHandler aviatorUploadHandler;
 
     private SimpleBlackjackIpc? simpleBlackjackIpc;
     private SimpleScratchIpc? simpleScratchIpc;
+    private SimpleAviatorIpc? simpleAviatorIpc;
 
     public Plugin()
     {
@@ -46,6 +49,7 @@ public sealed class Plugin : IDalamudPlugin
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         blackjackUploadHandler = new BlackjackUploadHandler(this);
         scratchUploadHandler = new ScratchUploadHandler(this);
+        aviatorUploadHandler = new AviatorUploadHandler(this);
 
         configWindow = new ConfigWindow(this);
         WindowSystem.AddWindow(configWindow);
@@ -83,6 +87,17 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception ex)
         {
             Log.Information($"Failed to initialize SimpleScratch IPC: {ex.Message}");
+        }
+
+        try
+        {
+            Log.Information("Initializing IPC for SimpleAviator...");
+            simpleAviatorIpc = new SimpleAviatorIpc(aviatorUploadHandler.HandleRoundEnded);
+            Log.Information("SimpleAviator IPC initialized.");
+        }
+        catch (Exception ex)
+        {
+            Log.Information($"Failed to initialize SimpleAviator IPC: {ex.Message}");
         }
     }
 
@@ -131,6 +146,30 @@ public sealed class Plugin : IDalamudPlugin
         {
             Log.Error($"SimpleScratch existing upload failed: {ex}");
             ShowToast("SimpleScratch upload failed. Check /xllog for details.", NotificationType.Error);
+        }
+    }
+
+    public async Task UploadExistingStatsAviatorAsync()
+    {
+        try
+        {
+            if (simpleAviatorIpc is null)
+            {
+                ShowToast("SimpleAviator IPC is not available.", NotificationType.Error);
+                return;
+            }
+
+            await aviatorUploadHandler.UploadExistingAsync(simpleAviatorIpc);
+        }
+        catch (IpcNotReadyError ex)
+        {
+            Log.Warning($"SimpleAviator IPC is not ready: {ex.Message}");
+            ShowToast("SimpleAviator IPC is not ready yet. Try again after SimpleAviator finishes loading.", NotificationType.Error);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"SimpleAviator existing upload failed: {ex}");
+            ShowToast("SimpleAviator upload failed. Check /xllog for details.", NotificationType.Error);
         }
     }
 
