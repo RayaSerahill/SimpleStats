@@ -25,9 +25,11 @@ public abstract class GameUploadHandlerBase
         return false;
     }
 
-    protected bool HasUploadConfiguration(string gameName, bool notifyUser)
+    protected bool HasUploadConfiguration(string gameName, bool notifyUser, string? endpoint = null)
     {
-        if (string.IsNullOrWhiteSpace(Endpoint))
+        var targetEndpoint = endpoint ?? Endpoint;
+
+        if (string.IsNullOrWhiteSpace(targetEndpoint))
         {
             PluginLog.Warning($"{gameName} upload skipped: endpoint is missing.");
             if (notifyUser)
