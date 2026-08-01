@@ -77,6 +77,24 @@ public sealed class ConfigWindow : Window, IDisposable
             ImGui.EndTabItem();
         }
 
+        if (ImGui.BeginTabItem("SimpleAviator"))
+        {
+            ImGui.TextWrapped("Upload all existing SimpleAviator archives with full per-game round and player detail.");
+            if (ImGui.Button("Upload existing aviator archives###UploadExistingAviator"))
+            {
+                if (string.IsNullOrEmpty(plugin.Configuration.ApiKey))
+                {
+                    plugin.ShowToast("Please enter a valid API key.", NotificationType.Error);
+                }
+                else
+                {
+                    _ = plugin.UploadExistingStatsAviatorAsync();
+                }
+            }
+
+            ImGui.EndTabItem();
+        }
+
         ImGui.EndTabBar();
     }
 
