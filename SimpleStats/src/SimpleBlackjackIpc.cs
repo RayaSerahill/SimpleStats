@@ -19,8 +19,10 @@ public sealed class SimpleBlackjackIpc
         PluginLog.Information("EzIPC.Init called for SimpleBlackjack.");
     }
 
+    // Subscribed as object so Dalamud hands over SimpleBlackjack's payload as JSON instead of
+    // converting it by member name; see SimpleBlackjackPayloadConverter for why.
     [EzIPC("GetStats")]
-    private Func<string, List<StatsRecording>>? GetStatsIpc;
+    private Func<string, object>? GetStatsIpc;
 
     [EzIPC("GetArchives")]
     private Func<Dictionary<string, string>>? GetArchivesIpc;
@@ -42,7 +44,9 @@ public sealed class SimpleBlackjackIpc
             "GetStats",
             new (string IpcName, Func<IReadOnlyList<StatsRecording>>? Invoke)[]
             {
-                ("GetStats", GetStatsIpc is null ? null : () => GetStatsIpc.Invoke(archiveId)),
+                ("GetStats", GetStatsIpc is null
+                    ? null
+                    : () => SimpleBlackjackPayloadConverter.ToRecordings(GetStatsIpc.Invoke(archiveId), $"GetStats({archiveId})")),
             },
             []);
     }
@@ -86,9 +90,10 @@ public sealed class SimpleBlackjackIpc
     }
 
     [EzIPCEvent]
-    public void OnGameFinishedEx(StatsRecording stats)
+    public void OnGameFinishedEx(object payload)
     {
         Log.Information("OnGameFinished called in SimpleBlackjackIpc EX.");
+        var stats = SimpleBlackjackPayloadConverter.ToRecording(payload, "OnGameFinishedEx");
         Log.Information(stats.Time.ToString());
         onRoundCompleted(stats);
     }
