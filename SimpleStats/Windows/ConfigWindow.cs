@@ -77,6 +77,38 @@ public sealed class ConfigWindow : Window, IDisposable
             ImGui.EndTabItem();
         }
 
+        if (ImGui.BeginTabItem("SimpleWheel"))
+        {
+            ImGui.TextWrapped("Upload all existing SimpleWheel archived games.");
+            if (ImGui.Button("Upload current archive snapshot###UploadExistingWheel"))
+            {
+                if (string.IsNullOrEmpty(plugin.Configuration.ApiKey))
+                {
+                    plugin.ShowToast("Please enter a valid API key.", NotificationType.Error);
+                }
+                else
+                {
+                    _ = plugin.UploadExistingStatsWheelAsync();
+                }
+            }
+
+            ImGui.Spacing();
+            ImGui.TextWrapped("Upload all of your saved SimpleWheel presets, segments included.");
+            if (ImGui.Button("Upload presets###UploadWheelPresets"))
+            {
+                if (string.IsNullOrEmpty(plugin.Configuration.ApiKey))
+                {
+                    plugin.ShowToast("Please enter a valid API key.", NotificationType.Error);
+                }
+                else
+                {
+                    _ = plugin.UploadWheelPresetsAsync();
+                }
+            }
+
+            ImGui.EndTabItem();
+        }
+
         ImGui.EndTabBar();
     }
 

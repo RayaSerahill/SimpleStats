@@ -24,8 +24,16 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static INotificationManager NotificationManager { get; set; } = null!;
 
     private const string CommandName = "/simplestats";
-    private const string Endpoint = "https://stats.serahill.net/api/admin/games/import";
-    public const string EndpointScratch = "https://stats.serahill.net/api/admin/scratch/import";
+#if DEBUG
+    public const string BaseUrl = "http://localhost:3000";
+#else
+    public const string BaseUrl = "https://stats.serahill.net";
+#endif
+
+    private const string Endpoint = BaseUrl + "/api/admin/games/import";
+    public const string EndpointScratch = BaseUrl + "/api/admin/scratch/import";
+    public const string EndpointWheel = BaseUrl + "/api/admin/wheel/import";
+    public const string EndpointWheelPresets = BaseUrl + "/api/admin/wheel/presets/import";
 
     public Configuration Configuration { get; }
     public WindowSystem WindowSystem { get; } = new("sbjStats");
@@ -34,9 +42,11 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ConfigWindow configWindow;
     private readonly BlackjackUploadHandler blackjackUploadHandler;
     private readonly ScratchUploadHandler scratchUploadHandler;
+    private readonly WheelUploadHandler wheelUploadHandler;
 
     private SimpleBlackjackIpc? simpleBlackjackIpc;
     private SimpleScratchIpc? simpleScratchIpc;
+    private SimpleWheelIpc? simpleWheelIpc;
 
     public Plugin()
     {
@@ -46,6 +56,7 @@ public sealed class Plugin : IDalamudPlugin
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         blackjackUploadHandler = new BlackjackUploadHandler(this);
         scratchUploadHandler = new ScratchUploadHandler(this);
+        wheelUploadHandler = new WheelUploadHandler(this);
 
         configWindow = new ConfigWindow(this);
         WindowSystem.AddWindow(configWindow);
@@ -83,6 +94,17 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception ex)
         {
             Log.Information($"Failed to initialize SimpleScratch IPC: {ex.Message}");
+        }
+
+        try
+        {
+            Log.Information("Initializing IPC for SimpleWheel...");
+            simpleWheelIpc = new SimpleWheelIpc(wheelUploadHandler.HandleGameEnded);
+            Log.Information("SimpleWheel IPC initialized.");
+        }
+        catch (Exception ex)
+        {
+            Log.Information($"Failed to initialize SimpleWheel IPC: {ex.Message}");
         }
     }
 
@@ -131,6 +153,54 @@ public sealed class Plugin : IDalamudPlugin
         {
             Log.Error($"SimpleScratch existing upload failed: {ex}");
             ShowToast("SimpleScratch upload failed. Check /xllog for details.", NotificationType.Error);
+        }
+    }
+
+    public async Task UploadExistingStatsWheelAsync()
+    {
+        try
+        {
+            if (simpleWheelIpc is null)
+            {
+                ShowToast("SimpleWheel IPC is not available.", NotificationType.Error);
+                return;
+            }
+
+            await wheelUploadHandler.UploadExistingAsync(simpleWheelIpc);
+        }
+        catch (IpcNotReadyError ex)
+        {
+            Log.Warning($"SimpleWheel IPC is not ready: {ex.Message}");
+            ShowToast("SimpleWheel IPC is not ready yet. Try again after SimpleWheel finishes loading.", NotificationType.Error);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"SimpleWheel existing upload failed: {ex}");
+            ShowToast("SimpleWheel upload failed. Check /xllog for details.", NotificationType.Error);
+        }
+    }
+
+    public async Task UploadWheelPresetsAsync()
+    {
+        try
+        {
+            if (simpleWheelIpc is null)
+            {
+                ShowToast("SimpleWheel IPC is not available.", NotificationType.Error);
+                return;
+            }
+
+            await wheelUploadHandler.UploadPresetsAsync(simpleWheelIpc);
+        }
+        catch (IpcNotReadyError ex)
+        {
+            Log.Warning($"SimpleWheel IPC is not ready: {ex.Message}");
+            ShowToast("SimpleWheel IPC is not ready yet. Try again after SimpleWheel finishes loading.", NotificationType.Error);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"SimpleWheel preset upload failed: {ex}");
+            ShowToast("SimpleWheel preset upload failed. Check /xllog for details.", NotificationType.Error);
         }
     }
 
