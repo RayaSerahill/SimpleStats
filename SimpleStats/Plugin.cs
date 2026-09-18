@@ -24,9 +24,15 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static INotificationManager NotificationManager { get; set; } = null!;
 
     private const string CommandName = "/simplestats";
-    private const string Endpoint = "https://stats.serahill.net/api/admin/games/import";
-    public const string EndpointScratch = "https://stats.serahill.net/api/admin/scratch/import";
-    public const string EndpointWheel = "https://stats.serahill.net/api/admin/wheel/import";
+#if DEBUG
+    public const string BaseUrl = "http://localhost:3000";
+#else
+    public const string BaseUrl = "https://stats.serahill.net";
+#endif
+
+    private const string Endpoint = BaseUrl + "/api/admin/games/import";
+    public const string EndpointScratch = BaseUrl + "/api/admin/scratch/import";
+    public const string EndpointWheel = BaseUrl + "/api/admin/wheel/import";
 
     public Configuration Configuration { get; }
     public WindowSystem WindowSystem { get; } = new("sbjStats");
