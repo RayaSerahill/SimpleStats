@@ -7,6 +7,7 @@
 ## ✨ Features
 
 - Hooks into the **SBJ** plugin to grab Blackjack game stats as they happen.
+- Hooks into **SimpleScratch** and **SimpleWheel** for scratch card and wheel game stats.
 - Supports both **archived** and **live** stats, giving you flexibility in how you share your data.
 - **Auto‑uploads** stats to our personal site, keeping both players up-to-date.
 - Configurable **API key** for secure uploads.
@@ -23,4 +24,5 @@
 ## Optionals
 - **SBJ** plugin for Blackjack stats (not included)
 - SimpleScratch plugin for Scratch stats (not included)
+- SimpleWheel plugin for Wheel stats (not included)
 - **stats.serahill.net** account for uploading stats
