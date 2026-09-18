@@ -6,6 +6,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 using Dalamud.Interface.ImGuiNotification;
+using ECommons.DalamudServices.Legacy;
 using ECommons.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
