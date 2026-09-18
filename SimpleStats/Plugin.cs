@@ -149,7 +149,7 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
-    public async Task UploadExistingStatsWheelAsync(int? archiveLimit = null)
+    public async Task UploadExistingStatsWheelAsync()
     {
         try
         {
@@ -159,7 +159,7 @@ public sealed class Plugin : IDalamudPlugin
                 return;
             }
 
-            await wheelUploadHandler.UploadExistingAsync(simpleWheelIpc, archiveLimit);
+            await wheelUploadHandler.UploadExistingAsync(simpleWheelIpc);
         }
         catch (IpcNotReadyError ex)
         {
