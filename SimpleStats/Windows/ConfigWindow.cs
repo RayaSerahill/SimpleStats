@@ -79,7 +79,7 @@ public sealed class ConfigWindow : Window, IDisposable
 
         if (ImGui.BeginTabItem("SimpleWheel"))
         {
-            ImGui.TextWrapped("Upload all existing SimpleWheel archived games hosted by your current character.");
+            ImGui.TextWrapped("Upload all existing SimpleWheel archived games.");
             if (ImGui.Button("Upload current archive snapshot###UploadExistingWheel"))
             {
                 if (string.IsNullOrEmpty(plugin.Configuration.ApiKey))
