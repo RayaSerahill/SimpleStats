@@ -7,8 +7,7 @@ namespace sbjStats;
 
 public sealed class SimpleWheelIpc
 {
-    public const int DefaultArchiveLimit = 500;
-    public const int MinArchiveLimit = 1;
+    /// <summary>The largest limit SimpleWheel accepts on GetArchiveLimitIPC.</summary>
     public const int MaxArchiveLimit = 20000;
 
     private readonly Action<string, long> onGameEnded;
@@ -25,21 +24,16 @@ public sealed class SimpleWheelIpc
     [EzIPC] private Func<int, Task<string>>? GetArchiveLimitIPC;
 
     /// <summary>
-    /// Fetches the most recent archived wheel games as a JSON array, newest first.
-    /// Uses the limited gate when a limit is supplied, otherwise SimpleWheel's default window of 500 games.
+    /// Fetches the entire archive as a JSON array, newest first.
+    /// Asks the limited gate for the maximum SimpleWheel allows and falls back to the default 500-game window
+    /// if the limited gate is not available.
     /// </summary>
-    public async Task<string> GetArchiveAsync(int? limit = null)
+    public async Task<string> GetFullArchiveAsync()
     {
-        if (limit is { } requestedLimit)
-        {
-            if (GetArchiveLimitIPC is not null)
-            {
-                var clamped = Math.Clamp(requestedLimit, MinArchiveLimit, MaxArchiveLimit);
-                return await GetArchiveLimitIPC(clamped);
-            }
+        if (GetArchiveLimitIPC is not null)
+            return await GetArchiveLimitIPC(MaxArchiveLimit);
 
-            PluginLog.Warning("SimpleWheel GetArchiveLimit IPC is not available, falling back to the default archive window.");
-        }
+        PluginLog.Warning("SimpleWheel GetArchiveLimit IPC is not available, falling back to the default archive window.");
 
         if (GetArchiveIPC is null)
         {
