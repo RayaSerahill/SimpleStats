@@ -19,7 +19,6 @@ namespace sbjStats;
 /// Live games arrive one at a time from GameEndedIPC and are posted as a single JSON object.
 /// Archive snapshots come from GetArchive(Limit)IPC and are posted as a JSON array.
 /// Both use the same record schema so the server only has to understand one shape; see example.md.
-/// Only games hosted by the currently logged-in character are uploaded; anything else is dropped.
 /// </summary>
 public sealed class WheelUploadHandler : GameUploadHandlerBase
 {
@@ -42,13 +41,6 @@ public sealed class WheelUploadHandler : GameUploadHandlerBase
         if (!HasUploadConfiguration(GameName, notifyUser: true))
             return;
 
-        var dealer = await GetCurrentCharacterNameAsync();
-        if (string.IsNullOrWhiteSpace(dealer))
-        {
-            Plugin.ShowToast("SimpleWheel: log in to a character first so the archive can be filtered to your games.", NotificationType.Error);
-            return;
-        }
-
         var archiveJson = await ipc.GetFullArchiveAsync();
         if (string.IsNullOrWhiteSpace(archiveJson) || archiveJson.Trim() == "[]")
         {
@@ -56,7 +48,7 @@ public sealed class WheelUploadHandler : GameUploadHandlerBase
             return;
         }
 
-        var uploaded = await UploadArchiveSnapshotAsync(archiveJson, dealer);
+        var uploaded = await UploadArchiveSnapshotAsync(archiveJson);
         if (uploaded)
             Plugin.ShowToast("SimpleWheel archive uploaded.", NotificationType.Success);
     }
@@ -139,23 +131,10 @@ public sealed class WheelUploadHandler : GameUploadHandlerBase
         try
         {
             var dealer = await GetCurrentCharacterNameAsync();
-            if (string.IsNullOrWhiteSpace(dealer))
-            {
-                PluginLog.Warning("SimpleWheel live upload skipped: no logged-in character to match host_name against.");
-                return;
-            }
-
             var request = BuildLiveUploadRequest(json, archivedAtUnixSeconds, dealer);
             if (request is null)
             {
                 PluginLog.Warning("SimpleWheel live upload skipped: payload could not be transformed.");
-                return;
-            }
-
-            if (!IsHostedBy(request.HostName, dealer))
-            {
-                PluginLog.Information(
-                    $"SimpleWheel live upload skipped: game '{request.GameId ?? "<n/a>"}' was hosted by '{request.HostName ?? "<none>"}', not by '{dealer}'.");
                 return;
             }
 
@@ -167,9 +146,9 @@ public sealed class WheelUploadHandler : GameUploadHandlerBase
         }
     }
 
-    public async Task<bool> UploadArchiveSnapshotAsync(string archiveJson, string dealer)
+    public async Task<bool> UploadArchiveSnapshotAsync(string archiveJson)
     {
-        var request = BuildArchiveUploadRequest(archiveJson, dealer);
+        var request = BuildArchiveUploadRequest(archiveJson);
         if (request is null)
         {
             PluginLog.Warning("SimpleWheel archive upload skipped: payload could not be transformed.");
@@ -179,14 +158,12 @@ public sealed class WheelUploadHandler : GameUploadHandlerBase
 
         if (request.GameCount == 0)
         {
-            PluginLog.Information($"SimpleWheel archive upload skipped: none of the {request.SkippedCount} archived games were hosted by '{dealer}'.");
-            Plugin.ShowToast($"SimpleWheel: no archived games were hosted by {dealer}, nothing to upload.", NotificationType.Info);
+            Plugin.ShowToast("SimpleWheel: archive contained no games, nothing to upload.", NotificationType.Info);
             return false;
         }
 
         await SendWheelUploadAsync(request);
-        PluginLog.Information(
-            $"SimpleWheel archive snapshot of {request.GameCount} games transformed and uploaded ({request.SkippedCount} skipped, hosted by someone else).");
+        PluginLog.Information($"SimpleWheel archive snapshot of {request.GameCount} games transformed and uploaded.");
         return true;
     }
 
@@ -215,10 +192,7 @@ public sealed class WheelUploadHandler : GameUploadHandlerBase
         };
     }
 
-    /// <summary>
-    /// Builds the archive request, keeping only games whose host_name matches the given dealer.
-    /// </summary>
-    public static WheelUploadRequest? BuildArchiveUploadRequest(string archiveJson, string dealer)
+    public static WheelUploadRequest? BuildArchiveUploadRequest(string archiveJson)
     {
         if (string.IsNullOrWhiteSpace(archiveJson))
             return null;
@@ -235,15 +209,8 @@ public sealed class WheelUploadHandler : GameUploadHandlerBase
         }
 
         var games = new JArray();
-        var skipped = 0;
         foreach (var item in archive.OfType<JObject>())
         {
-            if (!IsHostedBy(item["host_name"]?.ToString(), dealer))
-            {
-                skipped++;
-                continue;
-            }
-
             games.Add(NormalizeArchiveGame(item));
         }
 
@@ -251,29 +218,8 @@ public sealed class WheelUploadHandler : GameUploadHandlerBase
         {
             UploadType = "archive",
             RawJson = games.ToString(Formatting.None),
-            Dealer = dealer,
-            GameCount = games.Count,
-            SkippedCount = skipped
+            GameCount = games.Count
         };
-    }
-
-    /// <summary>
-    /// True when the game's host_name is the given character. Comparison ignores case and surrounding
-    /// whitespace, and tolerates a trailing "@World" suffix on either side.
-    /// </summary>
-    public static bool IsHostedBy(string? hostName, string dealer)
-    {
-        if (string.IsNullOrWhiteSpace(hostName))
-            return false;
-
-        return string.Equals(StripWorld(hostName), StripWorld(dealer), StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string StripWorld(string name)
-    {
-        var trimmed = name.Trim();
-        var at = trimmed.IndexOf('@');
-        return at < 0 ? trimmed : trimmed[..at].TrimEnd();
     }
 
     /// <summary>
