@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Net.Http;
@@ -58,6 +59,79 @@ public sealed class WheelUploadHandler : GameUploadHandlerBase
         var uploaded = await UploadArchiveSnapshotAsync(archiveJson, dealer);
         if (uploaded)
             Plugin.ShowToast("SimpleWheel archive uploaded.", NotificationType.Success);
+    }
+
+    public async Task UploadPresetsAsync(SimpleWheelIpc ipc)
+    {
+        if (!HasUploadConfiguration(GameName, notifyUser: true))
+            return;
+
+        var dealer = await GetCurrentCharacterNameAsync();
+        if (string.IsNullOrWhiteSpace(dealer))
+        {
+            Plugin.ShowToast("SimpleWheel: log in to a character first so the presets can be attributed to you.", NotificationType.Error);
+            return;
+        }
+
+        var presets = await ipc.GetPresetsAsync();
+        if (presets.Count == 0)
+        {
+            Plugin.ShowToast("SimpleWheel: no presets were returned.", NotificationType.Info);
+            return;
+        }
+
+        var payload = BuildPresetsPayload(presets, dealer, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        PluginLog.Information($"SimpleWheel preset upload sending {presets.Count} preset(s) for '{dealer}'.");
+        PluginLog.Debug($"SimpleWheel presets raw JSON payload: {payload}");
+
+        var ok = await PostJsonAsync(Plugin.EndpointWheelPresets, payload.ToString(Formatting.None), "SimpleWheel preset upload");
+        if (ok)
+            Plugin.ShowToast($"SimpleWheel: {presets.Count} preset(s) uploaded \\o/", NotificationType.Success);
+    }
+
+    /// <summary>
+    /// Wraps the dealer's presets in an envelope with snake_case fields, matching the game payloads.
+    /// </summary>
+    public static JObject BuildPresetsPayload(IEnumerable<SimpleWheelIpc.WheelPreset> presets, string dealer, long uploadedAtUnixSeconds)
+    {
+        var presetArray = new JArray();
+        foreach (var preset in presets)
+        {
+            var segments = new JArray();
+            foreach (var segment in preset.Segments ?? [])
+            {
+                segments.Add(new JObject
+                {
+                    ["type"] = segment.Type ?? "string",
+                    ["value"] = segment.Value ?? string.Empty,
+                    ["value_type_gil"] = segment.ValueTypeGil,
+                    ["gil_value"] = segment.gilValue,
+                    ["preset_url"] = segment.PresetURL ?? string.Empty,
+                    ["url"] = segment.Url ?? string.Empty,
+                    ["win"] = segment.Win,
+                    ["bankrupt"] = segment.Bankrupt,
+                    ["probability"] = segment.Probability,
+                    ["color"] = segment.Color ?? string.Empty,
+                    ["pattern_url"] = segment.PatternUrl ?? string.Empty,
+                    ["free_spins"] = segment.FreeSpins,
+                    ["reverse_spin"] = segment.ReverseSpin,
+                    ["effects"] = new JArray(segment.Effects ?? [])
+                });
+            }
+
+            presetArray.Add(new JObject
+            {
+                ["name"] = preset.Name ?? string.Empty,
+                ["segments"] = segments
+            });
+        }
+
+        return new JObject
+        {
+            ["dealer"] = dealer,
+            ["uploaded_at"] = uploadedAtUnixSeconds,
+            ["presets"] = presetArray
+        };
     }
 
     public async Task UploadLiveGameAsync(string json, long archivedAtUnixSeconds)
@@ -306,24 +380,29 @@ public sealed class WheelUploadHandler : GameUploadHandlerBase
             $"SimpleWheel upload sending '{request.UploadType}' payload with {request.GameCount} game(s), player '{request.PlayerName ?? "<n/a>"}', game '{request.GameId ?? "<n/a>"}'.");
         PluginLog.Debug($"SimpleWheel raw JSON payload: {request.RawJson}");
 
+        var ok = await PostJsonAsync(Plugin.EndpointWheel, request.RawJson, "SimpleWheel upload");
+        if (ok)
+            Plugin.ShowToast("Wheel stats uploaded successfully \\o/", NotificationType.Success);
+    }
+
+    /// <summary>Posts a JSON body with the bearer key. Failures are logged and toasted; returns success.</summary>
+    private async Task<bool> PostJsonAsync(string endpoint, string json, string what)
+    {
         using var client = new HttpClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ApiKey);
 
-        using var content = new StringContent(request.RawJson, Encoding.UTF8, "application/json");
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var response = await client.PostAsync(Plugin.EndpointWheel, content);
+        var response = await client.PostAsync(endpoint, content);
         var responseText = await response.Content.ReadAsStringAsync();
 
-        if (!response.IsSuccessStatusCode)
-        {
-            var msg = $"SimpleWheel upload failed: {(int)response.StatusCode} {response.ReasonPhrase} | {responseText}";
-            PluginLog.Warning(msg);
-            Plugin.ShowToast(msg, NotificationType.Error);
-        }
-        else
-        {
-            Plugin.ShowToast("Wheel stats uploaded successfully \\o/", NotificationType.Success);
-        }
+        if (response.IsSuccessStatusCode)
+            return true;
+
+        var msg = $"{what} failed: {(int)response.StatusCode} {response.ReasonPhrase} | {responseText}";
+        PluginLog.Warning(msg);
+        Plugin.ShowToast(msg, NotificationType.Error);
+        return false;
     }
 
     private static JObject? TryParseObject(string json)
