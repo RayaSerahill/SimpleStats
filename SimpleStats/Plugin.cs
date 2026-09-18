@@ -33,6 +33,7 @@ public sealed class Plugin : IDalamudPlugin
     private const string Endpoint = BaseUrl + "/api/admin/games/import";
     public const string EndpointScratch = BaseUrl + "/api/admin/scratch/import";
     public const string EndpointWheel = BaseUrl + "/api/admin/wheel/import";
+    public const string EndpointWheelPresets = BaseUrl + "/api/admin/wheel/presets/import";
 
     public Configuration Configuration { get; }
     public WindowSystem WindowSystem { get; } = new("sbjStats");
@@ -176,6 +177,30 @@ public sealed class Plugin : IDalamudPlugin
         {
             Log.Error($"SimpleWheel existing upload failed: {ex}");
             ShowToast("SimpleWheel upload failed. Check /xllog for details.", NotificationType.Error);
+        }
+    }
+
+    public async Task UploadWheelPresetsAsync()
+    {
+        try
+        {
+            if (simpleWheelIpc is null)
+            {
+                ShowToast("SimpleWheel IPC is not available.", NotificationType.Error);
+                return;
+            }
+
+            await wheelUploadHandler.UploadPresetsAsync(simpleWheelIpc);
+        }
+        catch (IpcNotReadyError ex)
+        {
+            Log.Warning($"SimpleWheel IPC is not ready: {ex.Message}");
+            ShowToast("SimpleWheel IPC is not ready yet. Try again after SimpleWheel finishes loading.", NotificationType.Error);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"SimpleWheel preset upload failed: {ex}");
+            ShowToast("SimpleWheel preset upload failed. Check /xllog for details.", NotificationType.Error);
         }
     }
 
