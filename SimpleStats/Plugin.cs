@@ -26,6 +26,7 @@ public sealed class Plugin : IDalamudPlugin
     private const string CommandName = "/simplestats";
     private const string Endpoint = "https://stats.serahill.net/api/admin/games/import";
     public const string EndpointScratch = "https://stats.serahill.net/api/admin/scratch/import";
+    public const string EndpointWheel = "https://stats.serahill.net/api/admin/wheel/import";
 
     public Configuration Configuration { get; }
     public WindowSystem WindowSystem { get; } = new("sbjStats");
@@ -34,9 +35,11 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ConfigWindow configWindow;
     private readonly BlackjackUploadHandler blackjackUploadHandler;
     private readonly ScratchUploadHandler scratchUploadHandler;
+    private readonly WheelUploadHandler wheelUploadHandler;
 
     private SimpleBlackjackIpc? simpleBlackjackIpc;
     private SimpleScratchIpc? simpleScratchIpc;
+    private SimpleWheelIpc? simpleWheelIpc;
 
     public Plugin()
     {
@@ -46,6 +49,7 @@ public sealed class Plugin : IDalamudPlugin
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         blackjackUploadHandler = new BlackjackUploadHandler(this);
         scratchUploadHandler = new ScratchUploadHandler(this);
+        wheelUploadHandler = new WheelUploadHandler(this);
 
         configWindow = new ConfigWindow(this);
         WindowSystem.AddWindow(configWindow);
@@ -83,6 +87,17 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception ex)
         {
             Log.Information($"Failed to initialize SimpleScratch IPC: {ex.Message}");
+        }
+
+        try
+        {
+            Log.Information("Initializing IPC for SimpleWheel...");
+            simpleWheelIpc = new SimpleWheelIpc(wheelUploadHandler.HandleGameEnded);
+            Log.Information("SimpleWheel IPC initialized.");
+        }
+        catch (Exception ex)
+        {
+            Log.Information($"Failed to initialize SimpleWheel IPC: {ex.Message}");
         }
     }
 
@@ -131,6 +146,30 @@ public sealed class Plugin : IDalamudPlugin
         {
             Log.Error($"SimpleScratch existing upload failed: {ex}");
             ShowToast("SimpleScratch upload failed. Check /xllog for details.", NotificationType.Error);
+        }
+    }
+
+    public async Task UploadExistingStatsWheelAsync(int? archiveLimit = null)
+    {
+        try
+        {
+            if (simpleWheelIpc is null)
+            {
+                ShowToast("SimpleWheel IPC is not available.", NotificationType.Error);
+                return;
+            }
+
+            await wheelUploadHandler.UploadExistingAsync(simpleWheelIpc, archiveLimit);
+        }
+        catch (IpcNotReadyError ex)
+        {
+            Log.Warning($"SimpleWheel IPC is not ready: {ex.Message}");
+            ShowToast("SimpleWheel IPC is not ready yet. Try again after SimpleWheel finishes loading.", NotificationType.Error);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"SimpleWheel existing upload failed: {ex}");
+            ShowToast("SimpleWheel upload failed. Check /xllog for details.", NotificationType.Error);
         }
     }
 
