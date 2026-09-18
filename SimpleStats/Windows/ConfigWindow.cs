@@ -11,6 +11,7 @@ public sealed class ConfigWindow : Window, IDisposable
     private readonly Plugin plugin;
     private string apiKey;
     private bool enableUpload;
+    private int wheelArchiveLimit = SimpleWheelIpc.DefaultArchiveLimit;
 
     public ConfigWindow(Plugin plugin) : base("SBJ Stats Config###sbjStatsConfig")
     {
@@ -71,6 +72,28 @@ public sealed class ConfigWindow : Window, IDisposable
                 else
                 {
                     _ = plugin.UploadExistingStatsScratchAsync();
+                }
+            }
+
+            ImGui.EndTabItem();
+        }
+
+        if (ImGui.BeginTabItem("SimpleWheel"))
+        {
+            ImGui.TextWrapped("Upload the most recent SimpleWheel archived games. Larger windows mean bigger payloads and slower uploads.");
+            ImGui.SetNextItemWidth(160);
+            if (ImGui.InputInt("Games to fetch", ref wheelArchiveLimit, 100, 500))
+                wheelArchiveLimit = Math.Clamp(wheelArchiveLimit, SimpleWheelIpc.MinArchiveLimit, SimpleWheelIpc.MaxArchiveLimit);
+
+            if (ImGui.Button("Upload current archive snapshot###UploadExistingWheel"))
+            {
+                if (string.IsNullOrEmpty(plugin.Configuration.ApiKey))
+                {
+                    plugin.ShowToast("Please enter a valid API key.", NotificationType.Error);
+                }
+                else
+                {
+                    _ = plugin.UploadExistingStatsWheelAsync(wheelArchiveLimit);
                 }
             }
 
