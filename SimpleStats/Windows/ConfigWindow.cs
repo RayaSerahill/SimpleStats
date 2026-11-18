@@ -111,7 +111,7 @@ public sealed class ConfigWindow : Window, IDisposable
 
         if (ImGui.BeginTabItem("SimpleMarbles"))
         {
-            ImGui.TextWrapped("Upload all existing SimpleMarbles archived games.");
+            ImGui.TextWrapped("Upload all existing SimpleMarbles archived games. Your own finished games are sent with their full race results, which takes a moment per game.");
             if (ImGui.Button("Upload current archive snapshot###UploadExistingMarbles"))
             {
                 if (string.IsNullOrEmpty(plugin.Configuration.ApiKey))
@@ -123,6 +123,8 @@ public sealed class ConfigWindow : Window, IDisposable
                     _ = plugin.UploadExistingStatsMarblesAsync();
                 }
             }
+
+            ImGui.TextWrapped(plugin.MarblesUploadStatus);
 
             ImGui.EndTabItem();
         }
