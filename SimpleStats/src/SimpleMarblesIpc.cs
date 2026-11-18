@@ -17,11 +17,11 @@ public sealed class SimpleMarblesIpc
         PluginLog.Information("EzIPC.Init called for SimpleMarblesIpc.");
     }
 
-    // Only the names of SimpleMarbles' gates are known. Their signatures are assumed to match
-    // SimpleScratch and SimpleWheel: async, JSON handed over as a string, integer game ids.
+    // GetArchiveIPC is confirmed against a real payload. The other two follow SimpleAviator's
+    // documented gates: async, JSON handed over as a string, and game ids are strings ("a46498").
     [EzIPC] private Func<Task<string>>? GetStatsIPC;
     [EzIPC] private Func<Task<string>>? GetArchiveIPC;
-    [EzIPC] private Func<int, Task<string>>? GetGameArchiveIPC;
+    [EzIPC] private Func<string, Task<string>>? GetGameArchiveIPC;
 
     /// <summary>Fetches the dealer's stats as JSON.</summary>
     public async Task<string> GetStatsAsync()
@@ -47,8 +47,8 @@ public sealed class SimpleMarblesIpc
         return await GetArchiveIPC();
     }
 
-    /// <summary>Fetches the full archive of one game as JSON.</summary>
-    public async Task<string> GetGameArchiveAsync(int gameId)
+    /// <summary>Fetches one game's full detail (races and per-player results) as JSON.</summary>
+    public async Task<string> GetGameArchiveAsync(string gameId)
     {
         if (GetGameArchiveIPC is null)
         {
