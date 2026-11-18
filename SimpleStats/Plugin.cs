@@ -34,6 +34,7 @@ public sealed class Plugin : IDalamudPlugin
     public const string EndpointScratch = BaseUrl + "/api/admin/scratch/import";
     public const string EndpointWheel = BaseUrl + "/api/admin/wheel/import";
     public const string EndpointWheelPresets = BaseUrl + "/api/admin/wheel/presets/import";
+    public const string EndpointMarbles = BaseUrl + "/api/admin/marbles/import";
 
     public Configuration Configuration { get; }
     public WindowSystem WindowSystem { get; } = new("sbjStats");
