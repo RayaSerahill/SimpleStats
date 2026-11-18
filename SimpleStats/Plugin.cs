@@ -219,6 +219,9 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
+    /// <summary>Progress and outcome of the last SimpleMarbles upload, shown in the SimpleMarbles tab.</summary>
+    public string MarblesUploadStatus => marblesUploadHandler.Status;
+
     public async Task UploadExistingStatsMarblesAsync()
     {
         try
