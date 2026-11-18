@@ -44,10 +44,12 @@ public sealed class Plugin : IDalamudPlugin
     private readonly BlackjackUploadHandler blackjackUploadHandler;
     private readonly ScratchUploadHandler scratchUploadHandler;
     private readonly WheelUploadHandler wheelUploadHandler;
+    private readonly MarblesUploadHandler marblesUploadHandler;
 
     private SimpleBlackjackIpc? simpleBlackjackIpc;
     private SimpleScratchIpc? simpleScratchIpc;
     private SimpleWheelIpc? simpleWheelIpc;
+    private SimpleMarblesIpc? simpleMarblesIpc;
 
     public Plugin()
     {
@@ -58,6 +60,7 @@ public sealed class Plugin : IDalamudPlugin
         blackjackUploadHandler = new BlackjackUploadHandler(this);
         scratchUploadHandler = new ScratchUploadHandler(this);
         wheelUploadHandler = new WheelUploadHandler(this);
+        marblesUploadHandler = new MarblesUploadHandler(this);
 
         configWindow = new ConfigWindow(this);
         WindowSystem.AddWindow(configWindow);
@@ -106,6 +109,17 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception ex)
         {
             Log.Information($"Failed to initialize SimpleWheel IPC: {ex.Message}");
+        }
+
+        try
+        {
+            Log.Information("Initializing IPC for SimpleMarbles...");
+            simpleMarblesIpc = new SimpleMarblesIpc(marblesUploadHandler.HandleRaceEnded);
+            Log.Information("SimpleMarbles IPC initialized.");
+        }
+        catch (Exception ex)
+        {
+            Log.Information($"Failed to initialize SimpleMarbles IPC: {ex.Message}");
         }
     }
 
@@ -202,6 +216,30 @@ public sealed class Plugin : IDalamudPlugin
         {
             Log.Error($"SimpleWheel preset upload failed: {ex}");
             ShowToast("SimpleWheel preset upload failed. Check /xllog for details.", NotificationType.Error);
+        }
+    }
+
+    public async Task UploadExistingStatsMarblesAsync()
+    {
+        try
+        {
+            if (simpleMarblesIpc is null)
+            {
+                ShowToast("SimpleMarbles IPC is not available.", NotificationType.Error);
+                return;
+            }
+
+            await marblesUploadHandler.UploadExistingAsync(simpleMarblesIpc);
+        }
+        catch (IpcNotReadyError ex)
+        {
+            Log.Warning($"SimpleMarbles IPC is not ready: {ex.Message}");
+            ShowToast("SimpleMarbles IPC is not ready yet. Try again after SimpleMarbles finishes loading.", NotificationType.Error);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"SimpleMarbles existing upload failed: {ex}");
+            ShowToast("SimpleMarbles upload failed. Check /xllog for details.", NotificationType.Error);
         }
     }
 
